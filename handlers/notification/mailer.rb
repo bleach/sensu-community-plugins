@@ -15,6 +15,8 @@ gem 'mail', '~> 2.5.4'
 require 'mail'
 require 'timeout'
 
+SEVERITIES = %w[ok warning critical unknown]
+
 class Mailer < Sensu::Handler
   def short_name
     @event['client']['name'] + '/' + @event['check']['name']
@@ -22,6 +24,10 @@ class Mailer < Sensu::Handler
 
   def action_to_string
    @event['action'].eql?('resolve') ? "RESOLVED" : "ALERT"
+  end
+
+  def previous_severity(event)
+    SEVERITIES[event['check']['history'][-2].to_i]
   end
 
   def handle
@@ -37,6 +43,14 @@ class Mailer < Sensu::Handler
     smtp_password = settings['mailer']['smtp_password'] || nil
     smtp_authentication = settings['mailer']['smtp_authentication'] || :plain
     smtp_enable_starttls_auto = settings['mailer']['smtp_enable_starttls_auto'] == "false" ? false : true
+
+    severities = settings['handlers']['mailer']['severities']
+
+    if @event['action'] == 'resolve' and !severities.include?(previous_severity(@event))
+      puts severities.inspect	
+      puts previous_severity(@event)
+      return
+    end
 
     playbook = "Playbook:  #{@event['check']['playbook']}" if @event['check']['playbook']
     body = <<-BODY.gsub(/^\s+/, '')
